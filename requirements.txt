@@ -8,3 +8,11 @@ joblib
 fastapi
 uvicorn
 dill
+Flask
+
+apache-airflow==2.8.1 # Matches image version
+apache-airflow-providers-cncf-kubernetes # If you plan to deploy to K8s later
+apache-airflow-providers-docker # If you plan to use DockerOperator
+apache-airflow-providers-postgres # For Airflow's metadata DB
+gunicorn 
+psycopg2-binary 

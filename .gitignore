@@ -12,3 +12,4 @@ RESULTS/*
 **/*.lock.*
 **/.terraform
 **/plans/
+logs/

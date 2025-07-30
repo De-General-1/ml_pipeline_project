@@ -1,0 +1,14 @@
+artifact_uri: file:///home/fafa/Phase-3/Final_choice/ml_pipeline_project/mlruns/357629288966156994/edc86343bdd847c69985c5bbb384ae46/artifacts
+end_time: 1753904910781
+entry_point_name: ''
+experiment_id: '357629288966156994'
+lifecycle_stage: active
+run_id: edc86343bdd847c69985c5bbb384ae46
+run_name: Logistic_Regression_UserFeatures_100K
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1753904899595
+status: 3
+tags: []
+user_id: fafa

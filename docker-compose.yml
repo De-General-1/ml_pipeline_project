@@ -1,0 +1,104 @@
+version: '3.8'
+
+x-airflow-common:
+  &airflow-common
+  # Set the Airflow image to use
+  image: apache/airflow:2.8.1-python3.10 # Or a newer version if available
+  # User and Group IDs for consistent permissions with host machine (important for mounted volumes)
+  user: "${AIRFLOW_UID}:0" # Uses current host user ID for permissions
+  env_file:
+    - .env
+  volumes:
+    # Mount DAGs folder
+    - ./dags:/opt/airflow/dags
+    # Mount scripts folder (where train.py is)
+    - ./scripts:/opt/airflow/scripts
+    # Mount data folder (where ml-100k.zip and extracted data will go)
+    - ./data:/opt/airflow/data
+    # Mount mlruns folder for MLflow tracking (shared with MLflow service)
+    - ./mlruns:/opt/airflow/mlruns
+    # Mount models folder for joblib files
+    - ./models:/opt/airflow/models
+    # Mount the src folder for inference_api (though API will be separate for now)
+    - ./src:/opt/airflow/src
+    # Airflow logs
+    - ./logs:/opt/airflow/logs
+    # Local Airflow configuration file (optional, but good practice)
+    # - ./airflow.cfg:/opt/airflow/airflow.cfg
+  environment:
+    # Airflow configuration settings
+    &airflow-env-vars
+    AIRFLOW_WEBSERVER_PORT: 8080
+    AIRFLOW_DATABASE: postgres
+    AIRFLOW_EXECUTOR: LocalExecutor # For local development
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false' # Don't load example DAGs
+    AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow # DB connection
+    AIRFLOW__WEBSERVER__RBAC: 'true' # Enable Role-Based Access Control (recommended)
+    # Python path to include scripts directory
+    PYTHONPATH: '/opt/airflow/scripts:/opt/airflow/src' # Add scripts and src to Python path
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    ports:
+      - "5432:5432" # Expose Postgres if you want to inspect it directly
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Airflow Scheduler
+  airflow-scheduler:
+    <<: *airflow-common # Use common Airflow settings
+    command: scheduler
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports: [] # Scheduler doesn't need exposed ports
+    restart: on-failure
+
+  # Airflow Webserver
+  airflow-webserver:
+    <<: *airflow-common # Use common Airflow settings
+    command: webserver
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080" # Airflow UI port
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: on-failure
+
+  # Airflow Worker (using LocalExecutor, so worker is less critical but good to have)
+  airflow-worker:
+    <<: *airflow-common # Use common Airflow settings
+    command: worker
+    depends_on:
+      airflow-scheduler:
+        condition: service_started # or service_healthy, depending on scheduler setup
+      airflow-webserver:
+        condition: service_healthy
+    ports: []
+    restart: on-failure
+
+  # Initialize Airflow database and create user (runs only once)
+  airflow-init:
+    <<: *airflow-common
+    command: bash -c "airflow db migrate && airflow users create --username airflow --password airflow --firstname Airflow --lastname Admin --role Admin --email admin@example.com"
+    environment:
+      <<: *airflow-env-vars
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false' # Do not load examples during init
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
