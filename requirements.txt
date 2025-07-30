@@ -1,0 +1,10 @@
+pandas
+scikit-learn
+mlflow
+dagshub
+kagglehub
+datasets
+joblib
+fastapi
+uvicorn
+dill
