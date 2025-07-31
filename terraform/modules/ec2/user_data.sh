@@ -21,10 +21,24 @@ apt install -y git
 mkdir -p /home/ubuntu/ml_pipeline_project
 cd /home/ubuntu/ml_pipeline_project
 
-# Clone repository (you'll need to replace with your repo URL)
-# git clone https://github.com/your-username/ml_pipeline_project.git .
+# Clone repository
+git clone https://github.com/De-General-1/ml_pipeline_project.git .
 
-# For now, create the necessary files
+# Install AWS CLI
+apt install -y awscli
+
+# Create AWS credentials directory and configure
+mkdir -p /home/ubuntu/.aws
+cat > /home/ubuntu/.aws/config << 'AWSEOF'
+[default]
+region = eu-west-1
+output = json
+AWSEOF
+
+# Set up IAM role credentials (will be used automatically)
+chown -R ubuntu:ubuntu /home/ubuntu/.aws
+
+# Update docker-compose with proper configuration
 cat > docker-compose.yml << 'EOF'
 version: '3.8'
 
@@ -49,6 +63,8 @@ services:
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AWS_DEFAULT_REGION: eu-west-1
+      S3_BUCKET: ${s3_bucket}
       _PIP_ADDITIONAL_REQUIREMENTS: 'mlflow boto3 scikit-learn pandas numpy'
     command: >
       bash -c "
@@ -70,6 +86,8 @@ services:
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AWS_DEFAULT_REGION: eu-west-1
+      S3_BUCKET: ${s3_bucket}
       _PIP_ADDITIONAL_REQUIREMENTS: 'mlflow boto3 scikit-learn pandas numpy'
     command: >
       bash -c "
@@ -93,6 +111,8 @@ services:
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AWS_DEFAULT_REGION: eu-west-1
+      S3_BUCKET: ${s3_bucket}
       _PIP_ADDITIONAL_REQUIREMENTS: 'mlflow boto3 scikit-learn pandas numpy'
     command: >
       bash -c "
@@ -116,6 +136,8 @@ services:
     volumes:
       - ./mlruns:/mlflow/mlruns
     working_dir: /mlflow
+    environment:
+      AWS_DEFAULT_REGION: eu-west-1
     command: >
       bash -c "
         pip install mlflow boto3 &&
@@ -156,8 +178,20 @@ AIRFLOW_UID=50000
 AIRFLOW_PROJ_DIR=/home/ubuntu/ml_pipeline_project
 EOF
 
+# Copy the EC2 DAG to dags directory
+cp dags/ml_pipeline_ec2.py dags/
+
 # Start services
 cd /home/ubuntu/ml_pipeline_project
 docker-compose up -d
 
+# Wait for services to be ready
+sleep 60
+
+# Check service status
+docker-compose ps
+
 echo "ML Pipeline deployment completed!"
+echo "Access Airflow at: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8080"
+echo "Access MLflow at: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):5000"
+echo "Access Inference API at: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8000"
