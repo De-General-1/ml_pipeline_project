@@ -119,3 +119,5 @@ resource "aws_instance" "ml_pipeline" {
     Environment = var.environment
   }
 }
+
+

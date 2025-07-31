@@ -37,3 +37,8 @@ variable "account_id" {
   description = "AWS account ID"
   type        = number
 }
+
+variable "inference_api_repo_name"{
+  description = "Inference API repo name"
+  type        = string
+}

@@ -1,9 +1,3 @@
-
-provider "aws" {
-  region  = var.aws_region
-  profile = "degen-mlops"
-}
-
 # VPC
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
@@ -69,3 +63,10 @@ module "ec2" {
   subnet_id    = aws_subnet.public.id
 }
 
+module "inference_api_repo" {
+  source = "./modules/ecr"
+  providers = {
+    aws = aws.primary
+  }
+  repository_name = var.inference_api_repo_name
+}
