@@ -13,7 +13,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Movie Engagement Prediction API", version="1.0.0")
+
 
 # Global variables for model artifacts
 model = None
@@ -136,10 +136,17 @@ def preprocess_input(request: PredictionRequest) -> pd.DataFrame:
         logger.error(f"Error preprocessing input: {e}")
         raise HTTPException(status_code=400, detail=f"Preprocessing error: {str(e)}")
 
-@app.on_event("startup")
-async def startup_event():
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """Load model on startup"""
-    load_model_from_s3()
+    # Skip model loading in tests
+    if not os.getenv('PYTEST_CURRENT_TEST'):
+        load_model_from_s3()
+    yield
+
+app = FastAPI(title="Movie Engagement Prediction API", version="1.0.0", lifespan=lifespan)
 
 @app.get("/")
 async def root():

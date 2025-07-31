@@ -60,22 +60,18 @@ def test_predict_endpoint_model_not_loaded(mock_session):
     response = client.post("/predict", json=test_data)
     assert response.status_code == 503
 
+@patch('api.inference_api.preprocess_input')
 @patch('api.inference_api.model')
-@patch('api.inference_api.scaler')
-@patch('api.inference_api.mlb')
-@patch('api.inference_api.ohe_user')
-@patch('api.inference_api.feature_columns')
-def test_predict_endpoint_success(mock_features, mock_ohe, mock_mlb, mock_scaler, mock_model):
+def test_predict_endpoint_success(mock_model, mock_preprocess):
     """Test successful prediction"""
     # Setup mocks
     mock_model.predict_proba.return_value = [[0.3, 0.7]]
     mock_model.predict.return_value = [1]
-    mock_scaler.transform.return_value = [[1995.0]]
-    mock_mlb.classes_ = ['Action', 'Comedy', 'Drama']
-    mock_mlb.transform.return_value = [[1, 1, 0]]
-    mock_ohe.get_feature_names_out.return_value = ['Gender_F', 'Gender_M', 'Age_25', 'Occupation_student']
-    mock_ohe.transform.return_value = [[0, 1, 1, 1]]
-    mock_features.__iter__ = lambda x: iter(['ReleaseYear', 'Action', 'Comedy', 'Drama', 'Gender_F', 'Gender_M', 'Age_25', 'Occupation_student'])
+    
+    # Mock the preprocessing to return a simple DataFrame
+    import pandas as pd
+    mock_preprocess.return_value = pd.DataFrame([[1995.0, 1, 1, 0, 0, 1, 1, 1]], 
+                                               columns=['ReleaseYear', 'Action', 'Comedy', 'Drama', 'Gender_F', 'Gender_M', 'Age_25', 'Occupation_student'])
     
     test_data = {
         "user_id": 123,
