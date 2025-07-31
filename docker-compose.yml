@@ -3,7 +3,9 @@ version: '3.8'
 x-airflow-common:
   &airflow-common
   # Set the Airflow image to use
-  image: apache/airflow:2.8.1-python3.10 # Or a newer version if available
+  # image: apache/airflow:2.8.1-python3.10 # Or a newer version if available
+  # image: movie_ml_airflow:latest
+  build: .
   # User and Group IDs for consistent permissions with host machine (important for mounted volumes)
   user: "${AIRFLOW_UID}:0" # Uses current host user ID for permissions
   env_file:

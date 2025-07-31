@@ -1,0 +1,6 @@
+artifact_location: file:///opt/airflow/mlruns/753165013204908249
+creation_time: 1753959010907
+experiment_id: '753165013204908249'
+last_update_time: 1753959010907
+lifecycle_stage: active
+name: Movie-Engagement-Prediction-100K
