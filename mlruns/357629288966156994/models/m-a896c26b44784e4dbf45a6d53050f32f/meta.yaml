@@ -1,0 +1,10 @@
+artifact_location: file:///home/fafa/Phase-3/Final_choice/ml_pipeline_project/mlruns/357629288966156994/models/m-a896c26b44784e4dbf45a6d53050f32f/artifacts
+creation_timestamp: 1753904922631
+experiment_id: '357629288966156994'
+last_updated_timestamp: 1753904924265
+model_id: m-a896c26b44784e4dbf45a6d53050f32f
+model_type: null
+name: model
+source_run_id: c24f7f7a78684c728bc78b0086894de9
+status: 2
+status_message: null

@@ -12,3 +12,12 @@ RESULTS/*
 **/*.lock.*
 **/.terraform
 **/plans/
+logs/
+
+# Logs and artifacts
+mlruns/
+models/
+.env.*
+*.pkl
+*.log
+*.pyc
