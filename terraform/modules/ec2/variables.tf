@@ -21,7 +21,7 @@ variable "subnet_id" {
 variable "ami_id" {
   description = "AMI ID for EC2 instance"
   type        = string
-  default     = "ami-0c76bd4bd302b30ec" # Ubuntu 22.04 LTS eu-west-1
+  default     = "ami-0c1c30571d2dae5c9" # Ubuntu 22.04 LTS eu-west-1
 }
 
 variable "instance_type" {

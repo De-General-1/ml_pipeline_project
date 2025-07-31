@@ -1,177 +1,207 @@
-import os
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import boto3
+import pickle
 import pandas as pd
 import numpy as np
-import mlflow
-import joblib
-from flask import Flask, request, jsonify
-import traceback # Import for detailed error logging
+from typing import List, Dict, Any
+import os
+from datetime import datetime
+import logging
 
-# --- Configuration ---
-# IMPORTANT: Replace with the actual Run ID of your BEST RandomForestClassifier model
-# You can find this in your local MLflow UI (e.g., http://localhost:5000)
-# Click on the RandomForestClassifier run, and the Run ID will be displayed.
-# You provided: "c24f7f7a78684c728bc78b0086894de9" - ensuring this is YOUR RF Run ID is crucial!
-MLFLOW_MODEL_RUN_ID = "c24f7f7a78684c728bc78b0086894de9"
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Ensure MLflow is configured to look at your local file store
-os.environ['MLFLOW_TRACKING_URI'] = "file://" + os.path.abspath("./mlruns")
-print(f"MLflow API loading models from: {os.environ['MLFLOW_TRACKING_URI']}")
+app = FastAPI(title="Movie Engagement Prediction API", version="1.0.0")
 
-# --- Initialize Flask App ---
-app = Flask(__name__)
-
-# --- Global variables for loaded model and preprocessors ---
+# Global variables for model artifacts
 model = None
 scaler = None
 mlb = None
-ohe_user_features = None
+ohe_user = None
+feature_columns = None
+last_model_update = None
 
-# Define the exact list of feature columns in the order expected by the model.
-# This list will be dynamically populated after loading preprocessors.
-feature_columns_ordered_global = []
+class PredictionRequest(BaseModel):
+    user_id: int
+    movie_id: int
+    age: int
+    gender: str
+    occupation: str
+    genres: List[str]
+    release_year: int
 
-def load_model_and_preprocessors():
-    """
-    Loads the trained model and preprocessing artifacts from MLflow.
-    """
-    global model, scaler, mlb, ohe_user_features, feature_columns_ordered_global
+class PredictionResponse(BaseModel):
+    user_id: int
+    movie_id: int
+    engagement_probability: float
+    engagement_prediction: int
+    model_version: str
+    prediction_timestamp: str
 
-    print(f"Loading model and preprocessors from MLflow run ID: {MLFLOW_MODEL_RUN_ID}")
-    try:
-        # Load the model
-        model = mlflow.pyfunc.load_model(f"runs:/{MLFLOW_MODEL_RUN_ID}/model")
-        print("Model loaded successfully.")
-
-        # Download and load preprocessing artifacts
-        scaler_path = mlflow.artifacts.download_artifacts(f"runs:/{MLFLOW_MODEL_RUN_ID}/preprocessing/scaler.joblib")
-        mlb_path = mlflow.artifacts.download_artifacts(f"runs:/{MLFLOW_MODEL_RUN_ID}/preprocessing/multilabel_binarizer.joblib")
-        ohe_user_path = mlflow.artifacts.download_artifacts(f"runs:/{MLFLOW_MODEL_RUN_ID}/preprocessing/ohe_user.joblib")
-
-        scaler = joblib.load(scaler_path)
-        mlb = joblib.load(mlb_path)
-        ohe_user_features = joblib.load(ohe_user_path)
-        print("Preprocessing objects loaded successfully.")
-        
-        # --- CRITICAL: Dynamically determine the exact feature column order and names ---
-        # This mirrors the feature_columns list from train.py *after* ReleaseYear has been scaled
-        # and its original column name retained for the scaled values.
-        
-        # These are the column names as they were used *before* scaling in train.py for numerical features.
-        # However, for the final model input, these will contain the scaled values.
-        numerical_feature_name = 'ReleaseYear' # The name of the column in the final X, containing scaled values.
-        
-        categorical_features_genres = list(mlb.classes_)
-        categorical_features_users = list(ohe_user_features.get_feature_names_out(['Gender', 'Age', 'Occupation']))
-        
-        # The order MUST be consistent with how X was formed in train.py
-        feature_columns_ordered_global = [numerical_feature_name] + categorical_features_genres + categorical_features_users
-        
-        print(f"Expected feature columns (from loaded preprocessors): {feature_columns_ordered_global}")
-
-    except Exception as e:
-        print(f"Error loading model or preprocessors: {e}")
-        # In a real application, you might want to raise an exception or exit
-        # if the model cannot be loaded, as the API won't function.
-        raise RuntimeError(f"Failed to load ML artifacts: {e}")
-
-def preprocess_input(data: dict) -> pd.DataFrame:
-    """
-    Preprocesses raw input data from the API request into a feature DataFrame.
-    This logic must mirror the preprocessing in train.py exactly,
-    including column naming conventions for the final DataFrame fed to the model.
-    """
-    if isinstance(data, dict):
-        df_input = pd.DataFrame([data])
-    elif isinstance(data, list):
-        df_input = pd.DataFrame(data)
-    else:
-        raise ValueError("Input data must be a dictionary (single instance) or a list of dictionaries (batch).")
-
-    # Ensure all required raw input columns exist in the initial input
-    required_raw_cols = ['ReleaseYear', 'Genres', 'Gender', 'Age', 'Occupation']
-    if not all(col in df_input.columns for col in required_raw_cols):
-        missing_cols = [col for col in required_raw_cols if col not in df_input.columns]
-        raise ValueError(f"Input data is missing required columns: {missing_cols}")
-
-    # Make a copy to avoid SettingWithCopyWarning and to build the processed DataFrame
-    df_temp_processed = pd.DataFrame(index=df_input.index)
-
-    # 1. Process ReleaseYear: Scale and assign to the 'ReleaseYear' column name
-    df_temp_processed['ReleaseYear'] = df_input['ReleaseYear'].astype(float)
-    df_temp_processed['ReleaseYear'] = scaler.transform(df_temp_processed[['ReleaseYear']])
-
-    # 2. Process Genres (Multi-label binarization)
-    # Ensure 'Genres' column exists and handle potential empty strings
-    input_genres = df_input['Genres'].fillna('').astype(str).apply(lambda x: x.split('|') if x else [])
-    genre_features = mlb.transform(input_genres)
-    genre_feature_df = pd.DataFrame(genre_features, columns=mlb.classes_, index=df_input.index)
-    df_temp_processed = pd.concat([df_temp_processed, genre_feature_df], axis=1)
-
-    # 3. Process User Features (One-Hot Encoding for Gender, Age, Occupation)
-    # Convert 'Age' to string as OHE was fitted on string/object types
-    df_input['Age'] = df_input['Age'].astype(str)
-    user_encoded_features = ohe_user_features.transform(df_input[['Gender', 'Age', 'Occupation']])
-    user_feature_df = pd.DataFrame(user_encoded_features,
-                                   columns=ohe_user_features.get_feature_names_out(['Gender', 'Age', 'Occupation']),
-                                   index=df_input.index)
-    df_temp_processed = pd.concat([df_temp_processed, user_feature_df], axis=1)
-
-    # Reconstruct the final DataFrame 'X_processed' with the exact columns and order
-    # required by the model. This handles cases where some OHE columns might be missing
-    # in the current inference input but were present during training.
-    X_processed = pd.DataFrame(0.0, index=df_temp_processed.index, columns=feature_columns_ordered_global)
-    for col in feature_columns_ordered_global:
-        if col in df_temp_processed.columns:
-            X_processed[col] = df_temp_processed[col]
+def load_model_from_s3():
+    """Load model and preprocessing artifacts from S3"""
+    global model, scaler, mlb, ohe_user, feature_columns, last_model_update
     
-    return X_processed
-
-# --- Flask Routes ---
-@app.route('/')
-def health_check():
-    """Simple health check endpoint."""
-    return "Movie Engagement Prediction API is running!"
-
-@app.route('/predict', methods=['POST'])
-def predict():
-    """
-    Predicts user engagement based on movie and user features.
-    Expected JSON input format (for a single prediction):
-    {
-        "ReleaseYear": 1995,
-        "Genres": "Action|Adventure|Fantasy",
-        "Gender": "M",
-        "Age": 25,
-        "Occupation": "student"
-    }
-    Can also accept a list of such dictionaries for batch prediction.
-    """
-    if not request.json:
-        return jsonify({"error": "Invalid input, please send JSON data"}), 400
-
-    raw_data = request.json
-    print(f"Received raw data: {raw_data}")
-
     try:
-        processed_data = preprocess_input(raw_data)
-        predictions = model.predict(processed_data)
-        labels = ["Dislike", "Like"]
-        predicted_labels = [labels[p] for p in predictions]
-
-        return jsonify({"predictions": predicted_labels}), 200
-
-    except ValueError as e:
-        # Client-side input validation errors
-        return jsonify({"error": str(e)}), 400
+        s3_bucket = os.getenv('S3_BUCKET', 'phase3-mlops-source-bucket-degen-1')
+        model_path = os.getenv('MODEL_PATH', 'models/random_forest')
+        
+        # Use IAM role in production, profile for local development
+        if os.getenv('AWS_EXECUTION_ENV'):
+            s3_client = boto3.client('s3')
+        else:
+            session = boto3.Session(profile_name='degen-mlops')
+            s3_client = session.client('s3')
+        
+        # Download model artifacts
+        artifacts = ['model.pkl', 'scaler.pkl', 'multilabel_binarizer.pkl', 'ohe_user.pkl']
+        
+        for artifact in artifacts:
+            s3_key = f"{model_path}/{artifact}"
+            local_path = f"/tmp/{artifact}"
+            
+            logger.info(f"Downloading {s3_key} from S3...")
+            s3_client.download_file(s3_bucket, s3_key, local_path)
+        
+        # Load artifacts
+        with open('/tmp/model.pkl', 'rb') as f:
+            model = pickle.load(f)
+        
+        with open('/tmp/scaler.pkl', 'rb') as f:
+            scaler = pickle.load(f)
+        
+        with open('/tmp/multilabel_binarizer.pkl', 'rb') as f:
+            mlb = pickle.load(f)
+        
+        with open('/tmp/ohe_user.pkl', 'rb') as f:
+            ohe_user = pickle.load(f)
+        
+        # Define feature columns (same as training)
+        numerical_features = ['ReleaseYear']
+        categorical_features_genres = list(mlb.classes_)
+        categorical_features_users = list(ohe_user.get_feature_names_out(['Gender', 'Age', 'Occupation']))
+        feature_columns = numerical_features + categorical_features_genres + categorical_features_users
+        
+        last_model_update = datetime.now()
+        logger.info("Model loaded successfully from S3")
+        
     except Exception as e:
-        # Any other unexpected internal errors
-        traceback.print_exc() # Print full traceback to console/logs for debugging
-        return jsonify({"error": f"An internal error occurred: {e}. Check server logs for details."}), 500
+        logger.error(f"Error loading model from S3: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load model: {str(e)}")
 
-# --- Main execution block ---
-if __name__ == '__main__':
-    # Load model and preprocessors when the app starts
-    load_model_and_preprocessors()
-    # Run the Flask app
-    # Use 0.0.0.0 to make it accessible externally if needed, or 127.0.0.1 for local only
-    app.run(host='0.0.0.0', port=5001, debug=True) # debug=True for development, turn off for production
+def preprocess_input(request: PredictionRequest) -> pd.DataFrame:
+    """Preprocess input data to match training format"""
+    try:
+        # Create base dataframe
+        data = {
+            'ReleaseYear': [request.release_year],
+            'Gender': [request.gender],
+            'Age': [request.age],
+            'Occupation': [request.occupation]
+        }
+        
+        df = pd.DataFrame(data)
+        
+        # Process genres
+        genre_features = mlb.transform([request.genres])
+        genre_df = pd.DataFrame(genre_features, columns=mlb.classes_)
+        
+        # Process user features
+        user_features = ohe_user.transform(df[['Gender', 'Age', 'Occupation']])
+        user_df = pd.DataFrame(user_features, columns=ohe_user.get_feature_names_out(['Gender', 'Age', 'Occupation']))
+        
+        # Combine all features
+        result_df = pd.concat([
+            df[['ReleaseYear']],
+            genre_df,
+            user_df
+        ], axis=1)
+        
+        # Ensure all feature columns are present
+        for col in feature_columns:
+            if col not in result_df.columns:
+                result_df[col] = 0
+        
+        # Reorder columns to match training
+        result_df = result_df[feature_columns]
+        
+        # Scale numerical features
+        result_df['ReleaseYear'] = scaler.transform(result_df[['ReleaseYear']])
+        
+        return result_df
+        
+    except Exception as e:
+        logger.error(f"Error preprocessing input: {e}")
+        raise HTTPException(status_code=400, detail=f"Preprocessing error: {str(e)}")
+
+@app.on_event("startup")
+async def startup_event():
+    """Load model on startup"""
+    load_model_from_s3()
+
+@app.get("/")
+async def root():
+    return {"message": "Movie Engagement Prediction API", "status": "running"}
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    model_status = "loaded" if model is not None else "not_loaded"
+    return {
+        "status": "healthy",
+        "model_status": model_status,
+        "last_model_update": last_model_update.isoformat() if last_model_update else None
+    }
+
+@app.post("/predict", response_model=PredictionResponse)
+async def predict(request: PredictionRequest):
+    """Make engagement prediction"""
+    if model is None:
+        raise HTTPException(status_code=503, detail="Model not loaded")
+    
+    try:
+        # Preprocess input
+        input_df = preprocess_input(request)
+        
+        # Make prediction
+        prediction_proba = model.predict_proba(input_df)[0]
+        engagement_probability = float(prediction_proba[1])  # Probability of engagement (class 1)
+        engagement_prediction = int(model.predict(input_df)[0])
+        
+        return PredictionResponse(
+            user_id=request.user_id,
+            movie_id=request.movie_id,
+            engagement_probability=engagement_probability,
+            engagement_prediction=engagement_prediction,
+            model_version="random_forest_v1",
+            prediction_timestamp=datetime.now().isoformat()
+        )
+        
+    except Exception as e:
+        logger.error(f"Prediction error: {e}")
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+
+@app.post("/reload-model")
+async def reload_model():
+    """Reload model from S3"""
+    try:
+        load_model_from_s3()
+        return {"message": "Model reloaded successfully", "timestamp": last_model_update.isoformat()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to reload model: {str(e)}")
+
+@app.get("/model-info")
+async def model_info():
+    """Get model information"""
+    if model is None:
+        raise HTTPException(status_code=503, detail="Model not loaded")
+    
+    return {
+        "model_type": type(model).__name__,
+        "feature_count": len(feature_columns),
+        "last_update": last_model_update.isoformat() if last_model_update else None,
+        "s3_bucket": os.getenv('S3_BUCKET'),
+        "model_path": os.getenv('MODEL_PATH')
+    }

@@ -110,7 +110,7 @@ resource "aws_instance" "ml_pipeline" {
   subnet_id              = var.subnet_id
   iam_instance_profile   = aws_iam_instance_profile.ec2_ml_pipeline.name
 
-  user_data = base64encode(templatefile("${path.module}/user_data.sh", {
+  user_data_base64 = base64encode(templatefile("${path.module}/user_data.sh", {
     s3_bucket = var.s3_bucket
   }))
 

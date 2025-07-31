@@ -1,41 +1,28 @@
 version: '3.8'
 
-x-airflow-common:
-  &airflow-common
-  # Set the Airflow image to use
-  image: apache/airflow:2.8.1-python3.10 # Or a newer version if available
-  # User and Group IDs for consistent permissions with host machine (important for mounted volumes)
-  user: "${AIRFLOW_UID}:0" # Uses current host user ID for permissions
-  env_file:
-    - .env
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.8.1-python3.10
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    AWS_PROFILE: degen-mlops
+    _PIP_ADDITIONAL_REQUIREMENTS: "mlflow boto3 pandas scikit-learn numpy"
   volumes:
-    # Mount DAGs folder
     - ./dags:/opt/airflow/dags
-    # Mount scripts folder (where train.py is)
-    - ./scripts:/opt/airflow/scripts
-    # Mount data folder (where ml-100k.zip and extracted data will go)
-    - ./data:/opt/airflow/data
-    # Mount mlruns folder for MLflow tracking (shared with MLflow service)
-    - ./mlruns:/opt/airflow/mlruns
-    # Mount models folder for joblib files
-    - ./models:/opt/airflow/models
-    # Mount the src folder for inference_api (though API will be separate for now)
-    - ./src:/opt/airflow/src
-    # Airflow logs
     - ./logs:/opt/airflow/logs
-    # Local Airflow configuration file (optional, but good practice)
-    # - ./airflow.cfg:/opt/airflow/airflow.cfg
-  environment:
-    # Airflow configuration settings
-    &airflow-env-vars
-    AIRFLOW_WEBSERVER_PORT: 8080
-    AIRFLOW_DATABASE: postgres
-    AIRFLOW_EXECUTOR: LocalExecutor # For local development
-    AIRFLOW__CORE__LOAD_EXAMPLES: 'false' # Don't load example DAGs
-    AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow # DB connection
-    AIRFLOW__WEBSERVER__RBAC: 'true' # Enable Role-Based Access Control (recommended)
-    # Python path to include scripts directory
-    PYTHONPATH: '/opt/airflow/scripts:/opt/airflow/src' # Add scripts and src to Python path
+    - ./plugins:/opt/airflow/plugins
+    - ./mlruns:/opt/airflow/mlruns
+    - ./src:/opt/airflow/src
+    - ~/.aws:/home/airflow/.aws:ro
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on: &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
 
 services:
   postgres:
@@ -44,61 +31,78 @@ services:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
-    ports:
-      - "5432:5432" # Expose Postgres if you want to inspect it directly
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U airflow"]
-      interval: 5s
-      timeout: 5s
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
       retries: 5
+      start_period: 5s
+    restart: always
 
-  # Airflow Scheduler
-  airflow-scheduler:
-    <<: *airflow-common # Use common Airflow settings
-    command: scheduler
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports: [] # Scheduler doesn't need exposed ports
-    restart: on-failure
-
-  # Airflow Webserver
   airflow-webserver:
-    <<: *airflow-common # Use common Airflow settings
+    <<: *airflow-common
     command: webserver
-    depends_on:
-      postgres:
-        condition: service_healthy
     ports:
-      - "8080:8080" # Airflow UI port
+      - "8080:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
-      interval: 10s
+      interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
-    restart: on-failure
-
-  # Airflow Worker (using LocalExecutor, so worker is less critical but good to have)
-  airflow-worker:
-    <<: *airflow-common # Use common Airflow settings
-    command: worker
+    restart: always
     depends_on:
-      airflow-scheduler:
-        condition: service_started # or service_healthy, depending on scheduler setup
-      airflow-webserver:
-        condition: service_healthy
-    ports: []
-    restart: on-failure
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
 
-  # Initialize Airflow database and create user (runs only once)
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
   airflow-init:
     <<: *airflow-common
-    command: bash -c "airflow db migrate && airflow users create --username airflow --password airflow --firstname Airflow --lastname Admin --role Admin --email admin@example.com"
-    environment:
-      <<: *airflow-env-vars
-      AIRFLOW__CORE__LOAD_EXAMPLES: 'false' # Do not load examples during init
+    command: >
+      bash -c "
+        airflow db migrate &&
+        airflow users create \
+          --username airflow \
+          --password airflow \
+          --firstname Airflow \
+          --lastname Admin \
+          --role Admin \
+          --email admin@example.com
+      "
     depends_on:
-      postgres:
-        condition: service_healthy
-    restart: on-failure
+      <<: *airflow-common-depends-on
+    user: "0:0"
+
+  mlflow:
+    image: python:3.10-slim
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/mlflow/mlruns
+      - ~/.aws:/root/.aws:ro
+    working_dir: /mlflow
+    environment:
+      AWS_PROFILE: degen-mlops
+    command: >
+      bash -c "
+        pip install mlflow boto3 &&
+        mlflow server \
+          --host 0.0.0.0 \
+          --port 5000 \
+          --backend-store-uri file:///mlflow/mlruns \
+          --default-artifact-root s3://phase3-mlops-source-bucket-degen-1/mlflow-artifacts
+      "
+    restart: always
+
+volumes:
+  postgres-db-volume:
