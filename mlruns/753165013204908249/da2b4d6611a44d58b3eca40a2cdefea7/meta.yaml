@@ -1,8 +1,9 @@
 artifact_uri: file:///opt/airflow/mlruns/753165013204908249/da2b4d6611a44d58b3eca40a2cdefea7/artifacts
+deleted_time: 1753967522151
 end_time: 1753960845502
 entry_point_name: ''
 experiment_id: '753165013204908249'
-lifecycle_stage: active
+lifecycle_stage: deleted
 run_id: da2b4d6611a44d58b3eca40a2cdefea7
 run_name: Random_Forest_UserFeatures_100K
 source_name: ''

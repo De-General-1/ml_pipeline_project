@@ -11,7 +11,7 @@ import traceback # Import for detailed error logging
 # You can find this in your local MLflow UI (e.g., http://localhost:5000)
 # Click on the RandomForestClassifier run, and the Run ID will be displayed.
 # You provided: "c24f7f7a78684c728bc78b0086894de9" - ensuring this is YOUR RF Run ID is crucial!
-MLFLOW_MODEL_RUN_ID = "c24f7f7a78684c728bc78b0086894de9"
+MLFLOW_MODEL_RUN_ID = "6c48a932543c4a5eb261fc5eef19ffbf"
 
 # Ensure MLflow is configured to look at your local file store
 os.environ['MLFLOW_TRACKING_URI'] = "file://" + os.path.abspath("./mlruns")
@@ -39,18 +39,21 @@ def load_model_and_preprocessors():
     print(f"Loading model and preprocessors from MLflow run ID: {MLFLOW_MODEL_RUN_ID}")
     try:
         # Load the model
-        model = mlflow.pyfunc.load_model(f"runs:/{MLFLOW_MODEL_RUN_ID}/model")
+        # model = mlflow.pyfunc.load_model(f"runs:/{MLFLOW_MODEL_RUN_ID}/model")
+        # print("Model loaded successfully.")
+
+        model = mlflow.sklearn.load_model(f"models:/MovieEngagementPredictor/6")
         print("Model loaded successfully.")
 
-        # Download and load preprocessing artifacts
-        scaler_path = mlflow.artifacts.download_artifacts(f"runs:/{MLFLOW_MODEL_RUN_ID}/preprocessing/scaler.joblib")
-        mlb_path = mlflow.artifacts.download_artifacts(f"runs:/{MLFLOW_MODEL_RUN_ID}/preprocessing/multilabel_binarizer.joblib")
-        ohe_user_path = mlflow.artifacts.download_artifacts(f"runs:/{MLFLOW_MODEL_RUN_ID}/preprocessing/ohe_user.joblib")
+        # # Download and load preprocessing artifacts
+        # scaler_path = mlflow.artifacts.download_artifacts(f"runs:/{MLFLOW_MODEL_RUN_ID}/preprocessing/scaler.joblib")
+        # mlb_path = mlflow.artifacts.download_artifacts(f"runs:/{MLFLOW_MODEL_RUN_ID}/preprocessing/multilabel_binarizer.joblib")
+        # ohe_user_path = mlflow.artifacts.download_artifacts(f"runs:/{MLFLOW_MODEL_RUN_ID}/preprocessing/ohe_user.joblib")
 
-        scaler = joblib.load(scaler_path)
-        mlb = joblib.load(mlb_path)
-        ohe_user_features = joblib.load(ohe_user_path)
-        print("Preprocessing objects loaded successfully.")
+        # scaler = joblib.load(scaler_path)
+        # mlb = joblib.load(mlb_path)
+        # ohe_user_features = joblib.load(ohe_user_path)
+        # print("Preprocessing objects loaded successfully.")
         
         # --- CRITICAL: Dynamically determine the exact feature column order and names ---
         # This mirrors the feature_columns list from train.py *after* ReleaseYear has been scaled
@@ -58,15 +61,15 @@ def load_model_and_preprocessors():
         
         # These are the column names as they were used *before* scaling in train.py for numerical features.
         # However, for the final model input, these will contain the scaled values.
-        numerical_feature_name = 'ReleaseYear' # The name of the column in the final X, containing scaled values.
+        # numerical_feature_name = 'ReleaseYear' # The name of the column in the final X, containing scaled values.
         
-        categorical_features_genres = list(mlb.classes_)
-        categorical_features_users = list(ohe_user_features.get_feature_names_out(['Gender', 'Age', 'Occupation']))
+        # categorical_features_genres = list(mlb.classes_)
+        # categorical_features_users = list(ohe_user_features.get_feature_names_out(['Gender', 'Age', 'Occupation']))
         
-        # The order MUST be consistent with how X was formed in train.py
-        feature_columns_ordered_global = [numerical_feature_name] + categorical_features_genres + categorical_features_users
+        # # The order MUST be consistent with how X was formed in train.py
+        # feature_columns_ordered_global = [numerical_feature_name] + categorical_features_genres + categorical_features_users
         
-        print(f"Expected feature columns (from loaded preprocessors): {feature_columns_ordered_global}")
+        # print(f"Expected feature columns (from loaded preprocessors): {feature_columns_ordered_global}")
 
     except Exception as e:
         print(f"Error loading model or preprocessors: {e}")

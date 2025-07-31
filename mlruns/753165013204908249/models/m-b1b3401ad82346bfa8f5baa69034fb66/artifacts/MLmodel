@@ -1,0 +1,104 @@
+artifact_path: file:///opt/airflow/mlruns/753165013204908249/models/m-b1b3401ad82346bfa8f5baa69034fb66/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.10.13
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.7.1
+is_signature_from_type_hint: false
+mlflow_version: 3.1.4
+model_id: m-b1b3401ad82346bfa8f5baa69034fb66
+model_size_bytes: 4615
+model_uuid: m-b1b3401ad82346bfa8f5baa69034fb66
+prompts: null
+run_id: 206ca6e231734563ba54aa0f9f63f6fa
+saved_input_example_info:
+  artifact_path: input_example.json
+  serving_input_path: serving_input_example.json
+  type: json_object
+signature:
+  inputs: '[{"type": "double", "name": "ReleaseYear", "required": true}, {"type":
+    "long", "name": "Action", "required": true}, {"type": "long", "name": "Adventure",
+    "required": true}, {"type": "long", "name": "Animation", "required": true}, {"type":
+    "long", "name": "Children''s", "required": true}, {"type": "long", "name": "Comedy",
+    "required": true}, {"type": "long", "name": "Crime", "required": true}, {"type":
+    "long", "name": "Documentary", "required": true}, {"type": "long", "name": "Drama",
+    "required": true}, {"type": "long", "name": "Fantasy", "required": true}, {"type":
+    "long", "name": "Film-Noir", "required": true}, {"type": "long", "name": "Horror",
+    "required": true}, {"type": "long", "name": "Musical", "required": true}, {"type":
+    "long", "name": "Mystery", "required": true}, {"type": "long", "name": "Romance",
+    "required": true}, {"type": "long", "name": "Sci-Fi", "required": true}, {"type":
+    "long", "name": "Thriller", "required": true}, {"type": "long", "name": "War",
+    "required": true}, {"type": "long", "name": "Western", "required": true}, {"type":
+    "long", "name": "unknown", "required": true}, {"type": "double", "name": "Gender_F",
+    "required": true}, {"type": "double", "name": "Gender_M", "required": true}, {"type":
+    "double", "name": "Age_7", "required": true}, {"type": "double", "name": "Age_10",
+    "required": true}, {"type": "double", "name": "Age_11", "required": true}, {"type":
+    "double", "name": "Age_13", "required": true}, {"type": "double", "name": "Age_14",
+    "required": true}, {"type": "double", "name": "Age_15", "required": true}, {"type":
+    "double", "name": "Age_16", "required": true}, {"type": "double", "name": "Age_17",
+    "required": true}, {"type": "double", "name": "Age_18", "required": true}, {"type":
+    "double", "name": "Age_19", "required": true}, {"type": "double", "name": "Age_20",
+    "required": true}, {"type": "double", "name": "Age_21", "required": true}, {"type":
+    "double", "name": "Age_22", "required": true}, {"type": "double", "name": "Age_23",
+    "required": true}, {"type": "double", "name": "Age_24", "required": true}, {"type":
+    "double", "name": "Age_25", "required": true}, {"type": "double", "name": "Age_26",
+    "required": true}, {"type": "double", "name": "Age_27", "required": true}, {"type":
+    "double", "name": "Age_28", "required": true}, {"type": "double", "name": "Age_29",
+    "required": true}, {"type": "double", "name": "Age_30", "required": true}, {"type":
+    "double", "name": "Age_31", "required": true}, {"type": "double", "name": "Age_32",
+    "required": true}, {"type": "double", "name": "Age_33", "required": true}, {"type":
+    "double", "name": "Age_34", "required": true}, {"type": "double", "name": "Age_35",
+    "required": true}, {"type": "double", "name": "Age_36", "required": true}, {"type":
+    "double", "name": "Age_37", "required": true}, {"type": "double", "name": "Age_38",
+    "required": true}, {"type": "double", "name": "Age_39", "required": true}, {"type":
+    "double", "name": "Age_40", "required": true}, {"type": "double", "name": "Age_41",
+    "required": true}, {"type": "double", "name": "Age_42", "required": true}, {"type":
+    "double", "name": "Age_43", "required": true}, {"type": "double", "name": "Age_44",
+    "required": true}, {"type": "double", "name": "Age_45", "required": true}, {"type":
+    "double", "name": "Age_46", "required": true}, {"type": "double", "name": "Age_47",
+    "required": true}, {"type": "double", "name": "Age_48", "required": true}, {"type":
+    "double", "name": "Age_49", "required": true}, {"type": "double", "name": "Age_50",
+    "required": true}, {"type": "double", "name": "Age_51", "required": true}, {"type":
+    "double", "name": "Age_52", "required": true}, {"type": "double", "name": "Age_53",
+    "required": true}, {"type": "double", "name": "Age_54", "required": true}, {"type":
+    "double", "name": "Age_55", "required": true}, {"type": "double", "name": "Age_56",
+    "required": true}, {"type": "double", "name": "Age_57", "required": true}, {"type":
+    "double", "name": "Age_58", "required": true}, {"type": "double", "name": "Age_59",
+    "required": true}, {"type": "double", "name": "Age_60", "required": true}, {"type":
+    "double", "name": "Age_61", "required": true}, {"type": "double", "name": "Age_62",
+    "required": true}, {"type": "double", "name": "Age_63", "required": true}, {"type":
+    "double", "name": "Age_64", "required": true}, {"type": "double", "name": "Age_65",
+    "required": true}, {"type": "double", "name": "Age_66", "required": true}, {"type":
+    "double", "name": "Age_68", "required": true}, {"type": "double", "name": "Age_69",
+    "required": true}, {"type": "double", "name": "Age_70", "required": true}, {"type":
+    "double", "name": "Age_73", "required": true}, {"type": "double", "name": "Occupation_administrator",
+    "required": true}, {"type": "double", "name": "Occupation_artist", "required":
+    true}, {"type": "double", "name": "Occupation_doctor", "required": true}, {"type":
+    "double", "name": "Occupation_educator", "required": true}, {"type": "double",
+    "name": "Occupation_engineer", "required": true}, {"type": "double", "name": "Occupation_entertainment",
+    "required": true}, {"type": "double", "name": "Occupation_executive", "required":
+    true}, {"type": "double", "name": "Occupation_healthcare", "required": true},
+    {"type": "double", "name": "Occupation_homemaker", "required": true}, {"type":
+    "double", "name": "Occupation_lawyer", "required": true}, {"type": "double", "name":
+    "Occupation_librarian", "required": true}, {"type": "double", "name": "Occupation_marketing",
+    "required": true}, {"type": "double", "name": "Occupation_none", "required": true},
+    {"type": "double", "name": "Occupation_other", "required": true}, {"type": "double",
+    "name": "Occupation_programmer", "required": true}, {"type": "double", "name":
+    "Occupation_retired", "required": true}, {"type": "double", "name": "Occupation_salesman",
+    "required": true}, {"type": "double", "name": "Occupation_scientist", "required":
+    true}, {"type": "double", "name": "Occupation_student", "required": true}, {"type":
+    "double", "name": "Occupation_technician", "required": true}, {"type": "double",
+    "name": "Occupation_writer", "required": true}]'
+  outputs: '[{"type": "long", "name": "Engagement", "required": true}]'
+  params: null
+type_hint_from_example: false
+utc_time_created: '2025-07-31 13:12:14.680325'
