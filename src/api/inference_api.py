@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 
-# Global variables for model artifacts
+# Global variables for model artifacts...
 model = None
 scaler = None
 mlb = None
