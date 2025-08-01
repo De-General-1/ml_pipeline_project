@@ -60,40 +60,28 @@ services:
 
   airflow-init:
     image: apache/airflow:2.8.0-python3.10
+    container_name: ml_pipeline_project_airflow_init
+    entrypoint: /bin/bash -c "pip install --no-cache-dir mlflow boto3 scikit-learn pandas numpy && airflow db migrate && airflow users create --username airflow --firstname Airflow --lastname Admin --role Admin --email admin@example.com --password airflow"
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AWS_DEFAULT_REGION: eu-west-1
       S3_BUCKET: ${s3_bucket}
-      _PIP_ADDITIONAL_REQUIREMENTS: 'mlflow boto3 scikit-learn pandas numpy'
-    command: >
-      bash -c "
-        pip install mlflow boto3 scikit-learn pandas numpy &&
-        airflow db init &&
-        airflow users create --username airflow --firstname Airflow --lastname Admin --role Admin --email admin@example.com --password airflow
-      "
     volumes:
       - ./dags:/opt/airflow/dags
-      - ./logs:/opt/airflow/logs
-      - ./plugins:/opt/airflow/plugins
-      - ./src:/opt/airflow/src
     depends_on:
       postgres:
         condition: service_healthy
 
   airflow-webserver:
     image: apache/airflow:2.8.0-python3.10
+    container_name: ml_pipeline_project_airflow_webserver
+    command: ["airflow", "webserver"]
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AWS_DEFAULT_REGION: eu-west-1
       S3_BUCKET: ${s3_bucket}
-      _PIP_ADDITIONAL_REQUIREMENTS: 'mlflow boto3 scikit-learn pandas numpy'
-    command: >
-      bash -c "
-        pip install mlflow boto3 scikit-learn pandas numpy &&
-        airflow webserver
-      "
     ports:
       - "8080:8080"
     volumes:
@@ -101,32 +89,34 @@ services:
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
       - ./src:/opt/airflow/src
+      - ./models:/opt/airflow/models
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
     restart: always
 
   airflow-scheduler:
     image: apache/airflow:2.8.0-python3.10
+    container_name: ml_pipeline_project_airflow_scheduler
+    command: ["airflow", "scheduler"]
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
       AWS_DEFAULT_REGION: eu-west-1
       S3_BUCKET: ${s3_bucket}
-      _PIP_ADDITIONAL_REQUIREMENTS: 'mlflow boto3 scikit-learn pandas numpy'
-    command: >
-      bash -c "
-        pip install mlflow boto3 scikit-learn pandas numpy &&
-        airflow scheduler
-      "
     volumes:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - ./plugins:/opt/airflow/plugins
       - ./src:/opt/airflow/src
+      - ./models:/opt/airflow/models
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
     restart: always
 
   mlflow:
