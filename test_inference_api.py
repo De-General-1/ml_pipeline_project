@@ -53,7 +53,7 @@ def test_inference_api(base_url="http://localhost:8000"):
     except Exception as e:
         print(f"   Error: {e}")
     
-    print("\n✅ API testing completed!")
+    print("\nAPI testing completed!")
 
 if __name__ == "__main__":
     import sys
