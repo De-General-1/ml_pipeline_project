@@ -1,32 +1,9 @@
 version: '3.8'
 
-x-airflow-common: &airflow-common
-  image: apache/airflow:2.8.1-python3.10
-  environment: &airflow-common-env
-    AIRFLOW__CORE__EXECUTOR: LocalExecutor
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-    AIRFLOW__CORE__FERNET_KEY: ''
-    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
-    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
-    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-    AWS_PROFILE: degen-mlops
-    _PIP_ADDITIONAL_REQUIREMENTS: "mlflow boto3 pandas scikit-learn numpy"
-  volumes:
-    - ./dags:/opt/airflow/dags
-    - ./logs:/opt/airflow/logs
-    - ./plugins:/opt/airflow/plugins
-    - ./mlruns:/opt/airflow/mlruns
-    - ./src:/opt/airflow/src
-    - ~/.aws:/home/airflow/.aws:ro
-  user: "${AIRFLOW_UID:-50000}:0"
-  depends_on: &airflow-common-depends-on
-    postgres:
-      condition: service_healthy
-
 services:
   postgres:
     image: postgres:13
+    container_name: ml_pipeline_project_postgres
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
@@ -40,67 +17,100 @@ services:
       start_period: 5s
     restart: always
 
+  airflow-init:
+    image: apache/airflow:2.8.0-python3.10
+    container_name: ml_pipeline_project_airflow_init
+    entrypoint: /bin/bash -c "pip install --no-cache-dir mlflow boto3 scikit-learn pandas numpy && airflow db migrate && airflow users create --username airflow --firstname Airflow --lastname Admin --role Admin --email admin@example.com --password airflow"
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AWS_DEFAULT_REGION: eu-west-1
+      S3_BUCKET: ${s3_bucket}
+    volumes:
+      - ./dags:/opt/airflow/dags
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   airflow-webserver:
-    <<: *airflow-common
-    command: webserver
+    build: .
+    container_name: ml_pipeline_project_airflow_webserver
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AWS_DEFAULT_REGION: eu-west-1
+      S3_BUCKET: ${s3_bucket}
     ports:
       - "8080:8080"
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    restart: always
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./src:/opt/airflow/src
+      - ./models:/opt/airflow/models
     depends_on:
-      <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    restart: always
+    command: ["webserver"]
 
   airflow-scheduler:
-    <<: *airflow-common
-    command: scheduler
-    restart: always
+    build: .
+    container_name: ml_pipeline_project_airflow_scheduler
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AWS_DEFAULT_REGION: eu-west-1
+      S3_BUCKET: ${s3_bucket}
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./src:/opt/airflow/src
+      - ./models:/opt/airflow/models
     depends_on:
-      <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-
-  airflow-init:
-    <<: *airflow-common
-    command: >
-      bash -c "
-        airflow db migrate &&
-        airflow users create \
-          --username airflow \
-          --password airflow \
-          --firstname Airflow \
-          --lastname Admin \
-          --role Admin \
-          --email admin@example.com
-      "
-    depends_on:
-      <<: *airflow-common-depends-on
-    user: "0:0"
+      postgres:
+        condition: service_healthy
+    restart: always
+    command: ["scheduler"]
 
   mlflow:
     image: python:3.10-slim
+    container_name: ml_pipeline_project_mlflow
     ports:
       - "5000:5000"
     volumes:
       - ./mlruns:/mlflow/mlruns
-      - ~/.aws:/root/.aws:ro
     working_dir: /mlflow
     environment:
-      AWS_PROFILE: degen-mlops
+      AWS_DEFAULT_REGION: eu-west-1
     command: >
       bash -c "
         pip install mlflow boto3 &&
-        mlflow server \
-          --host 0.0.0.0 \
-          --port 5000 \
-          --backend-store-uri file:///mlflow/mlruns \
-          --default-artifact-root s3://phase3-mlops-source-bucket-degen-1/mlflow-artifacts
+        mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri file:///mlflow/mlruns --default-artifact-root s3://${s3_bucket}/mlflow-artifacts
+      "
+    restart: always
+
+  inference-api:
+    image: python:3.10-slim
+    container_name: ml_pipeline_project_inference_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./models:/app/models
+    working_dir: /app
+    environment:
+      S3_BUCKET: ${s3_bucket}
+      MODEL_PATH: models/random_forest
+    command: >
+      bash -c "
+        pip install fastapi uvicorn boto3 scikit-learn pandas numpy &&
+        python -m uvicorn src.api.inference_api:app --host 0.0.0.0 --port 8000 --reload
       "
     restart: always
 
